@@ -36,8 +36,10 @@ numpy = ["numpy>=1.20"]
 hf-tokenizer = []
 
 [project.urls]
-Homepage = "https://github.com/Deepchavda007/blazechunk"
+Homepage = "https://blazechunk-documentation.vercel.app/"
+Documentation = "https://blazechunk-documentation.vercel.app/"
 Repository = "https://github.com/Deepchavda007/blazechunk"
+Issues = "https://github.com/Deepchavda007/blazechunk/issues"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
