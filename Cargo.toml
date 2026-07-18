@@ -15,18 +15,11 @@ exclude = ["benches/data/*", "packages/*", "assets/*", "scripts/*", "*.png", "*.
 
 [features]
 default = []
-# Optional HuggingFace `tokenizers` integration for real subword counts.
-# Off by default so the core crate stays dependency-light. Local-file loading
-# only (no Hub / network) — `tokenizers`'s `http` feature is intentionally not
-# enabled.
 hf-tokenizer = ["dep:tokenizers"]
 
 [dependencies]
 memchr = "2"
 daggrs = "0.1"
-# default-features off: keeps `http`/`hf-hub` out so Hub downloads stay unavailable.
-# `fancy-regex` is required by the crate (either it or `onig`); prefer fancy-regex
-# to avoid the native oniguruma dependency.
 tokenizers = { version = "0.21", optional = true, default-features = false, features = ["fancy-regex"] }
 
 [dev-dependencies]

@@ -1,15 +1,9 @@
 name: Release
 
-# Publishes blazechunk to PyPI when you publish a GitHub Release.
-# Wheels are built for Linux / macOS / Windows across Python 3.10–3.13, plus an
-# sdist, and uploaded via PyPI Trusted Publishing (OIDC) — no API token stored.
-# See the "Publishing" section of the README / setup notes for the one-time
-# PyPI trusted-publisher configuration.
-
 on:
   release:
     types: [published]
-  workflow_dispatch: {}   # allow manual runs from the Actions tab
+  workflow_dispatch: {}
 
 env:
   CARGO_TERM_COLOR: always
@@ -85,8 +79,3 @@ jobs:
         with:
           packages-dir: dist/
           password: ${{ secrets.PYPI_API_TOKEN }}
-          # The token is read from the repo secret PYPI_API_TOKEN — never hard-code it here.
-          # Alternative: Trusted Publishing (OIDC, no stored token). To switch, remove the
-          # `password:` line above, add `permissions: { id-token: write }` and
-          # `environment: pypi` to this job, and register a trusted publisher on PyPI
-          # (owner=Deepchavda007, repo=blazechunk, workflow=release.yml, environment=pypi).
