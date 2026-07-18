@@ -6,8 +6,9 @@
 
 <p align="center">
   <a href="https://pypi.org/project/blazechunk"><img src="https://img.shields.io/pypi/v/blazechunk.svg?color=e67e22" alt="PyPI"></a>
+  <a href="https://pypi.org/project/blazechunk"><img src="https://img.shields.io/pypi/pyversions/blazechunk.svg?color=3498db" alt="Python versions"></a>
   <a href="https://github.com/Deepchavda007/blazechunk"><img src="https://img.shields.io/badge/github-blazechunk-3498db" alt="GitHub"></a>
-  <a href="LICENSE-MIT"><img src="https://img.shields.io/badge/license-MIT%2FApache--2.0-9b59b6.svg" alt="License"></a>
+  <a href="https://github.com/Deepchavda007/blazechunk/blob/main/LICENSE-MIT"><img src="https://img.shields.io/badge/license-MIT%2FApache--2.0-9b59b6.svg" alt="License"></a>
 </p>
 
 ---
@@ -92,4 +93,5 @@ chunks = await chunk_async(b"Hello. World.", size=10, delimiters=b".")
 
 blazechunk is a fork of the excellent [chonkie-inc/chunk](https://github.com/chonkie-inc/chunk)
 project, and builds on its SIMD chunking core. Licensed under either of
-[Apache License, Version 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT) at your option.
+[Apache License, Version 2.0](https://github.com/Deepchavda007/blazechunk/blob/main/LICENSE-APACHE)
+or [MIT license](https://github.com/Deepchavda007/blazechunk/blob/main/LICENSE-MIT) at your option.
