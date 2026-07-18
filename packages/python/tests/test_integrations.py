@@ -45,6 +45,33 @@ class TestLangChainAdapter:
         splitter = BlazechunkTextSplitter()  # defaults to RecursiveChunker
         assert splitter.split_text(SAMPLE)
 
+    def test_async_split_text(self):
+        pytest.importorskip("langchain_text_splitters")
+        import asyncio
+
+        from blazechunk.integrations.langchain import BlazechunkTextSplitter
+
+        splitter = BlazechunkTextSplitter(TokenChunker(chunk_size=64, chunk_overlap=8))
+        sync_pieces = splitter.split_text(SAMPLE)
+        async_pieces = asyncio.run(splitter.asplit_text(SAMPLE))
+        assert async_pieces == sync_pieces
+
+    def test_async_transform_documents(self):
+        pytest.importorskip("langchain_text_splitters")
+        import asyncio
+
+        from langchain_core.documents import Document
+
+        from blazechunk.integrations.langchain import BlazechunkTextSplitter
+
+        splitter = BlazechunkTextSplitter(TokenChunker(chunk_size=64))
+        docs = asyncio.run(
+            splitter.atransform_documents([Document(page_content=SAMPLE, metadata={"s": 1})])
+        )
+        assert len(docs) > 1
+        assert all(d.page_content for d in docs)
+        assert all(d.metadata.get("s") == 1 for d in docs)
+
 
 class TestAgnoAdapter:
     def test_chunk_returns_documents(self):
@@ -78,3 +105,21 @@ class TestAgnoAdapter:
         strategy = BlazechunkChunking()
         doc = Document(content="", name="empty")
         assert strategy.chunk(doc) == [doc]
+
+    def test_async_chunk(self):
+        pytest.importorskip("agno")
+        import asyncio
+
+        from blazechunk.integrations.agno import BlazechunkChunking
+
+        try:
+            from agno.knowledge.document.base import Document
+        except ImportError:
+            from agno.document.base import Document  # type: ignore
+
+        strategy = BlazechunkChunking(TokenChunker(chunk_size=64, chunk_overlap=8))
+        doc = Document(content=SAMPLE, name="sample", meta_data={"source": "test"})
+        sync_chunks = strategy.chunk(doc)
+        async_chunks = asyncio.run(strategy.achunk(doc))
+        assert [c.content for c in async_chunks] == [c.content for c in sync_chunks]
+        assert len(async_chunks) > 1

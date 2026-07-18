@@ -17,7 +17,7 @@ except ImportError:  # older Agno
     from agno.document.chunking.strategy import ChunkingStrategy  # type: ignore
     from agno.document.base import Document  # type: ignore
 
-from blazechunk import BaseChunker, RecursiveChunker
+from blazechunk import BaseChunker, Chunk, RecursiveChunker
 
 __all__ = ["BlazechunkChunking"]
 
@@ -28,6 +28,9 @@ class BlazechunkChunking(ChunkingStrategy):
     Chunk sizing is governed by the blazechunk chunker you pass in. Each returned
     ``Document`` carries the source document's ``name`` and metadata, plus a
     ``chunk`` index and ``chunk_size`` (character count) in its ``meta_data``.
+
+    Provides both the synchronous ``chunk`` and the asynchronous ``achunk`` hooks
+    Agno calls, so it works in both sync and async ingestion pipelines.
 
     Args:
         chunker: Any blazechunk chunker (``TokenChunker``, ``SentenceChunker``,
@@ -49,10 +52,19 @@ class BlazechunkChunking(ChunkingStrategy):
         """Split an Agno ``Document`` into a list of chunked ``Document`` objects."""
         if not document.content:
             return [document]
+        pieces = self.chunker.chunk(self.clean_text(document.content))
+        return self._to_documents(document, pieces)
 
-        text = self.clean_text(document.content)
+    async def achunk(self, document: Document) -> List[Document]:
+        """Async ``chunk`` — chunks off the event loop via ``chunk_async``."""
+        if not document.content:
+            return [document]
+        pieces = await self.chunker.chunk_async(self.clean_text(document.content))
+        return self._to_documents(document, pieces)
+
+    def _to_documents(self, document: Document, pieces: List[Chunk]) -> List[Document]:
         chunked: List[Document] = []
-        for index, piece in enumerate(self.chunker.chunk(text), start=1):
+        for index, piece in enumerate(pieces, start=1):
             meta_data = dict(document.meta_data) if document.meta_data else {}
             meta_data["chunk"] = index
             meta_data["chunk_size"] = len(piece.text)
