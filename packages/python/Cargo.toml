@@ -1,0 +1,22 @@
+[package]
+name = "blazechunk-python"
+version = "0.10.2"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[lib]
+name = "_chunk"
+crate-type = ["cdylib"]
+
+[features]
+default = ["numpy-support"]
+numpy-support = ["dep:numpy"]
+# Optional real-subword counting via HuggingFace tokenizers (local file only).
+# Off by default — enable with `maturin develop --features hf-tokenizer`.
+hf-tokenizer = ["chunk/hf-tokenizer"]
+
+[dependencies]
+pyo3 = { version = "0.27", features = ["extension-module"] }
+numpy = { version = "0.27", optional = true }
+chunk = { path = "../.." }

@@ -1,0 +1,45 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "blazechunk"
+version = "0.10.2"
+description = "The fastest semantic text chunking library"
+readme = "README_PYPI.md"
+requires-python = ">=3.10"
+license = { text = "MIT OR Apache-2.0" }
+dependencies = []
+authors = [{ name = "Deep Chavda", email = "deep.chavda@simformsolutions.com" }]
+keywords = ["chunking", "text", "simd", "nlp", "tokenization", "rag", "blazechunk"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Text Processing",
+]
+
+[project.optional-dependencies]
+numpy = ["numpy>=1.20"]
+# Build-time maturin feature (no extra Python deps): 
+#   maturin develop --release --features hf-tokenizer
+# Enables RecursiveChunker/etc. `tokenizer=` paths to a local tokenizer.json.
+hf-tokenizer = []
+
+[project.urls]
+Homepage = "https://github.com/Deepchavda007/blazechunk"
+Repository = "https://github.com/Deepchavda007/blazechunk"
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+python-source = "python"
+module-name = "blazechunk._chunk"

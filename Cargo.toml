@@ -1,0 +1,55 @@
+[workspace]
+members = [".", "packages/python"]
+
+[package]
+name = "chunk"
+version = "0.10.2"
+edition = "2024"
+description = "The fastest semantic text chunking library — up to 1TB/s chunking throughput"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Deepchavda007/blazechunk"
+readme = "README.md"
+keywords = ["chunking", "text", "simd", "nlp", "tokenization"]
+categories = ["text-processing", "algorithms"]
+exclude = ["benches/data/*", "packages/*", "assets/*", "scripts/*", "*.png", "*.svg"]
+
+[features]
+default = []
+# Optional HuggingFace `tokenizers` integration for real subword counts.
+# Off by default so the core crate stays dependency-light. Local-file loading
+# only (no Hub / network) — `tokenizers`'s `http` feature is intentionally not
+# enabled.
+hf-tokenizer = ["dep:tokenizers"]
+
+[dependencies]
+memchr = "2"
+daggrs = "0.1"
+# default-features off: keeps `http`/`hf-hub` out so Hub downloads stay unavailable.
+# `fancy-regex` is required by the crate (either it or `onig`); prefer fancy-regex
+# to avoid the native oniguruma dependency.
+tokenizers = { version = "0.21", optional = true, default-features = false, features = ["fancy-regex"] }
+
+[dev-dependencies]
+criterion = "0.5"
+text-splitter = "0.18"
+kiru = "0.1"
+
+[[bench]]
+name = "chunk"
+harness = false
+
+[[bench]]
+name = "kiru"
+harness = false
+
+[[bench]]
+name = "text_splitter"
+harness = false
+
+[[bench]]
+name = "multi_pattern"
+harness = false
+
+[[bench]]
+name = "chunkers"
+harness = false
