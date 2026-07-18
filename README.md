@@ -64,6 +64,8 @@ offers **matching synchronous and asynchronous** methods with full type hints an
   `chunk_batch` / `chunk_batch_async`; async work runs off the event loop.
 - 🔤 **Pluggable tokenizers** — count by character, word, byte, or table row out of the box,
   or point at a HuggingFace `tokenizer.json` (with the `hf-tokenizer` build).
+- 🔌 **Framework integrations** — drop-in adapters for **LangChain** and **Agno**
+  (`pip install "blazechunk[langchain]"` / `"blazechunk[agno]"`).
 - 🧵 **Typed & documented** — ships `py.typed` and type stubs; every method has a docstring.
 
 ### Installation
