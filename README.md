@@ -26,6 +26,12 @@
         alt="The Uncompromising Code Formatter"
       />
     </a>
+    <a href="https://github.com/Deepchavda007/blazechunk/blob/main/CONTRIBUTING.md">
+      <img
+        src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg"
+        alt="PRs Welcome"
+      />
+    </a>
     <a href="https://opensource.org/licenses/MIT">
       <img
         src="https://img.shields.io/badge/License-MIT%2FApache--2.0-blue.svg"
@@ -154,6 +160,22 @@ naturally lower — reported per-chunker so the numbers stay honest:
 
 Reproduce with `cargo bench` (see [benches/README.md](benches/README.md) for the full table
 and methodology).
+
+### Contributing
+
+blazechunk is open source and **contributions are very welcome** — a bug report, a new
+chunker, a performance win, or a docs fix all help.
+
+- 🐛 Found a bug or want a feature? [Open an issue](https://github.com/Deepchavda007/blazechunk/issues).
+- 🔧 Want to send a change? See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the dev setup
+  (Rust + maturin), how to run the tests, and the PR checklist.
+
+By contributing you agree your work is dual-licensed under MIT and Apache-2.0, matching
+the project.
+
+<a href="https://github.com/Deepchavda007/blazechunk/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=Deepchavda007/blazechunk" alt="Contributors" />
+</a>
 
 ### Acknowledgements
 
