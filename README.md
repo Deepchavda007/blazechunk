@@ -16,7 +16,7 @@
     </a>
     <a href="https://pypi.python.org/pypi/blazechunk">
       <img
-        src="https://img.shields.io/pypi/pyversions/blazechunk?cacheSeconds=3600"
+        src="https://img.shields.io/pypi/pyversions/blazechunk"
         alt="Python Versions"
       />
     </a>
