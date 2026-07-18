@@ -1,10 +1,5 @@
 //! Throughput benchmarks for the five high-level chunkers.
 //!
-//! These are distinct operations from the raw byte-level `chunk()` primitive
-//! benchmarked in `chunk.rs`: each chunker tokenizes, splits, and merges, so its
-//! throughput is naturally lower than the SIMD size-based splitter. Numbers are
-//! reported per-chunker in `benches/README.md` so speed claims stay honest.
-//!
 //! Run with: `cargo bench --bench chunkers`
 
 use chunk::{
@@ -13,8 +8,7 @@ use chunk::{
 };
 use criterion::{Criterion, Throughput, black_box, criterion_group, criterion_main};
 
-/// Build roughly `target` bytes of varied ASCII prose (mirrors `main.py`'s
-/// `make_prose`, so Rust and Python benchmarks measure the same shape of input).
+/// Build roughly `target` bytes of varied ASCII prose.
 fn make_prose(target: usize) -> String {
     let para = "The quick brown fox jumps over the lazy dog. \
                 Chunking splits text at semantic boundaries such as periods, \

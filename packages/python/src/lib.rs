@@ -877,8 +877,6 @@ impl PyRecursiveChunker {
         let name = tokenizer.unwrap_or_else(|| "character".to_string());
         let (tokenizer, counter) = BoundCounter::resolve(&name)?;
         let rules = parse_recursive_rules(rules)?;
-        // The Rust core owns validation — build and validate once here so bad
-        // config raises at construction, then reuse the same rules per chunk.
         RsRecursive::new()
             .chunk_size(chunk_size)
             .min_characters_per_chunk(min_characters_per_chunk)
@@ -955,7 +953,6 @@ impl PySentenceChunker {
         let include_delim = parse_include_delim(&include_delim.unwrap_or_else(|| "prev".into()))?;
         let delim =
             delim.unwrap_or_else(|| vec![". ".into(), "! ".into(), "? ".into(), "\n".into()]);
-        // The Rust core owns validation — raise at construction on bad config.
         RsSentence::new()
             .chunk_size(chunk_size)
             .chunk_overlap(chunk_overlap)
@@ -1083,7 +1080,6 @@ impl PyTableChunker {
     fn new(tokenizer: Option<String>, chunk_size: usize) -> PyResult<Self> {
         let name = tokenizer.unwrap_or_else(|| "row".to_string());
         let (tokenizer, counter) = BoundCounter::resolve(&name)?;
-        // The Rust core owns validation — raise at construction on bad config.
         RsTable::new()
             .chunk_size(chunk_size)
             .validate()

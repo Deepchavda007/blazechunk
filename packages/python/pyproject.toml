@@ -30,9 +30,6 @@ classifiers = [
 
 [project.optional-dependencies]
 numpy = ["numpy>=1.20"]
-# Build-time maturin feature (no extra Python deps): 
-#   maturin develop --release --features hf-tokenizer
-# Enables RecursiveChunker/etc. `tokenizer=` paths to a local tokenizer.json.
 hf-tokenizer = []
 
 [project.urls]
