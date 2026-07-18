@@ -73,9 +73,6 @@ jobs:
     name: Publish to PyPI
     needs: [build-wheels, build-sdist]
     runs-on: ubuntu-latest
-    environment: pypi          # optional GitHub Environment for extra protection
-    permissions:
-      id-token: write          # required for Trusted Publishing (OIDC)
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -83,11 +80,13 @@ jobs:
           merge-multiple: true
           path: dist
 
-      - name: Publish to PyPI (Trusted Publishing)
+      - name: Publish to PyPI (API token)
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
-          # No `password:` — authentication happens over OIDC via the
-          # trusted publisher you configure on PyPI. To use an API token
-          # instead, delete the `permissions`/`environment` above and set:
-          #   password: ${{ secrets.PYPI_API_TOKEN }}
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          # The token is read from the repo secret PYPI_API_TOKEN — never hard-code it here.
+          # Alternative: Trusted Publishing (OIDC, no stored token). To switch, remove the
+          # `password:` line above, add `permissions: { id-token: write }` and
+          # `environment: pypi` to this job, and register a trusted publisher on PyPI
+          # (owner=Deepchavda007, repo=blazechunk, workflow=release.yml, environment=pypi).
