@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "blazechunk"
-version = "0.10.3"
+version = "0.11.0"
 description = "The fastest semantic text chunking library"
 readme = "README_PYPI.md"
 requires-python = ">=3.10"
@@ -31,6 +31,8 @@ classifiers = [
 [project.optional-dependencies]
 numpy = ["numpy>=1.20"]
 hf-tokenizer = []
+langchain = ["langchain-text-splitters>=0.3"]
+agno = ["agno>=1.0"]
 
 [project.urls]
 Homepage = "https://blazechunk-documentation.vercel.app/"
