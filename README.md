@@ -176,6 +176,9 @@ strategy = BlazechunkChunking(TokenChunker(chunk_size=512, chunk_overlap=64))
 # TextKnowledgeBase(path="docs", vector_db=..., chunking_strategy=strategy)
 ```
 
+Both adapters also provide async variants — LangChain `asplit_text` / `atransform_documents`
+and Agno `achunk` — so they run off the event loop in async ingestion pipelines.
+
 ### Benchmarks
 
 Throughput of the raw SIMD size-based chunking primitive, measured on enwik8/enwik9

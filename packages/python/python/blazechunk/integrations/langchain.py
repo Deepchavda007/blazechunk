@@ -8,8 +8,9 @@ any blazechunk chunker. Requires the ``langchain`` extra::
 
 from __future__ import annotations
 
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Sequence
 
+from langchain_core.documents import Document
 from langchain_text_splitters import TextSplitter
 
 from blazechunk import BaseChunker, RecursiveChunker
@@ -53,3 +54,24 @@ class BlazechunkTextSplitter(TextSplitter):
     def split_text(self, text: str) -> List[str]:
         """Split ``text`` into a list of chunk strings, in order."""
         return [chunk.text for chunk in self._chunker.chunk(text)]
+
+    async def asplit_text(self, text: str) -> List[str]:
+        """Async ``split_text`` — chunks off the event loop via ``chunk_async``."""
+        return [chunk.text for chunk in await self._chunker.chunk_async(text)]
+
+    async def atransform_documents(
+        self, documents: Sequence[Document], **kwargs: Any
+    ) -> List[Document]:
+        """Async document transform — chunks all documents concurrently.
+
+        Uses the chunker's ``chunk_batch_async`` so the event loop stays free.
+        Each source document's metadata is copied onto its chunks. (Unlike the
+        sync path, ``add_start_index`` is not applied here.)
+        """
+        docs = list(documents)
+        batches = await self._chunker.chunk_batch_async([d.page_content for d in docs])
+        out: List[Document] = []
+        for source, chunks in zip(docs, batches):
+            for chunk in chunks:
+                out.append(Document(page_content=chunk.text, metadata=dict(source.metadata)))
+        return out
