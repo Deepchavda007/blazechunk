@@ -142,6 +142,38 @@ for view in chunk(b"Hello. World. Test.", size=10, delimiters=b"."):
     print(bytes(view))
 ```
 
+### Integrations
+
+blazechunk plugs into popular RAG frameworks — install the matching extra.
+
+**LangChain**
+
+```bash
+pip install "blazechunk[langchain]"
+```
+
+```python
+from blazechunk import TokenChunker
+from blazechunk.integrations.langchain import BlazechunkTextSplitter
+
+splitter = BlazechunkTextSplitter(TokenChunker(chunk_size=512, chunk_overlap=64))
+docs = splitter.create_documents([text])
+```
+
+**Agno**
+
+```bash
+pip install "blazechunk[agno]"
+```
+
+```python
+from blazechunk import TokenChunker
+from blazechunk.integrations.agno import BlazechunkChunking
+
+strategy = BlazechunkChunking(TokenChunker(chunk_size=512, chunk_overlap=64))
+# TextKnowledgeBase(path="docs", vector_db=..., chunking_strategy=strategy)
+```
+
 ### Benchmarks
 
 Throughput of the raw SIMD size-based chunking primitive, measured on enwik8/enwik9

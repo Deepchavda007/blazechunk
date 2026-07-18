@@ -92,6 +92,29 @@ for view in chunk(b"Hello. World. Test.", size=10, delimiters=b"."):
 chunks = await chunk_async(b"Hello. World.", size=10, delimiters=b".")
 ```
 
+## 🔌 integrations
+
+blazechunk plugs into popular RAG frameworks — install the matching extra.
+
+```bash
+pip install "blazechunk[langchain]"   # LangChain
+pip install "blazechunk[agno]"        # Agno
+```
+
+```python
+# LangChain
+from blazechunk import TokenChunker
+from blazechunk.integrations.langchain import BlazechunkTextSplitter
+
+splitter = BlazechunkTextSplitter(TokenChunker(chunk_size=512, chunk_overlap=64))
+docs = splitter.create_documents([text])
+
+# Agno
+from blazechunk.integrations.agno import BlazechunkChunking
+
+strategy = BlazechunkChunking(TokenChunker(chunk_size=512, chunk_overlap=64))
+```
+
 ## 🙏 acknowledgements
 
 blazechunk is a fork of the excellent [chonkie-inc/chunk](https://github.com/chonkie-inc/chunk)
