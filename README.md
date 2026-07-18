@@ -4,7 +4,7 @@
     blazechunk<br /> <br />
     <a href="https://pypi.python.org/pypi/blazechunk">
       <img
-        src="https://img.shields.io/pypi/v/blazechunk.svg"
+        src="https://img.shields.io/pypi/v/blazechunk"
         alt="Python Package"
       />
     </a>
