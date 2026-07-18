@@ -7,6 +7,7 @@
 <p align="center">
   <a href="https://pypi.org/project/blazechunk"><img src="https://img.shields.io/pypi/v/blazechunk?color=e67e22" alt="PyPI"></a>
   <a href="https://pypi.org/project/blazechunk"><img src="https://img.shields.io/pypi/pyversions/blazechunk?color=3498db" alt="Python versions"></a>
+  <a href="https://blazechunk-documentation.vercel.app/"><img src="https://img.shields.io/badge/docs-blazechunk-3498db" alt="Documentation"></a>
   <a href="https://github.com/Deepchavda007/blazechunk"><img src="https://img.shields.io/badge/github-blazechunk-3498db" alt="GitHub"></a>
   <a href="https://github.com/Deepchavda007/blazechunk/blob/main/LICENSE-MIT"><img src="https://img.shields.io/badge/license-MIT%2FApache--2.0-9b59b6.svg" alt="License"></a>
 </p>
@@ -17,6 +18,8 @@
 Rust core with a small, uniform Python API. It ships six chunkers — a zero-copy byte `Chunker`
 plus `RecursiveChunker`, `SentenceChunker`, `TokenChunker`, `TableChunker`, and `CodeChunker` —
 and every high-level chunker offers **matching synchronous and asynchronous** methods.
+
+📖 **Full documentation:** https://blazechunk-documentation.vercel.app/
 
 ## 📦 installation
 

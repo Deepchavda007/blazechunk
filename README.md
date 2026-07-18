@@ -8,6 +8,12 @@
         alt="Python Package"
       />
     </a>
+    <a href="https://blazechunk-documentation.vercel.app/">
+      <img
+        src="https://img.shields.io/badge/docs-blazechunk-3498db"
+        alt="Documentation"
+      />
+    </a>
     <a href="https://github.com/Deepchavda007/blazechunk/actions/workflows/ci.yml">
       <img
         src="https://github.com/Deepchavda007/blazechunk/actions/workflows/ci.yml/badge.svg"
@@ -46,6 +52,8 @@
 **blazechunk** splits text at semantic boundaries and does it stupid fast: a SIMD-accelerated
 Rust core with a small, uniform Python API. It ships six chunkers, and every high-level chunker
 offers **matching synchronous and asynchronous** methods with full type hints and docstrings.
+
+📖 **Documentation:** https://blazechunk-documentation.vercel.app/
 
 ### Features
 
