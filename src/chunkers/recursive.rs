@@ -327,7 +327,7 @@ mod tests {
             .chunk(text, &CharCounter)
             .unwrap();
         for c in &out {
-            assert!(std::str::from_utf8(&text.as_bytes()[c.start..c.end]).is_ok());
+            assert!(text.get(c.start..c.end).is_some());
         }
         assert_eq!(
             out.iter().map(|c| c.end - c.start).sum::<usize>(),

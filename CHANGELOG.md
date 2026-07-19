@@ -4,6 +4,24 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and the project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.13.0] - 2026-07-19
+
+### Added
+- **Three embedding-based chunkers**, bringing the total to nine:
+  - `SemanticChunker` — splits at semantic-similarity troughs between sentence windows,
+    using Savitzky–Golay minima detection (`threshold`, `similarity_window`,
+    `filter_window`/`filter_polyorder`/`filter_tolerance`, optional `skip_window`).
+  - `SDPMChunker` — Semantic Double-Pass Merging: the semantic pass plus a skip-window
+    second pass that re-merges related, non-adjacent sentence groups (`skip_window`,
+    default `1`).
+  - `LateChunker` — "late chunking": recursive boundaries plus a whole-document,
+    mean-pooled embedding per chunk. Returns `LateChunk` objects carrying an `embedding`.
+- **Injected embedders** — the pure-Rust core ships no model; embeddings are injected via
+  the new `Embedder` / `TokenEmbedder` traits (mirroring `TokenCounter`). In Python, pass a
+  callable `embed_batch(list[str]) -> 2D` or any object exposing `embed_batch` / `encode`
+  (e.g. sentence-transformers, model2vec); `LateChunker` takes a token-level embedder.
+  `cosine_similarity` and deterministic test embedders are exposed from the Rust crate.
+
 ## [0.11.0]
 
 ### Added

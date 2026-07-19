@@ -33,7 +33,11 @@ from typing import Any, Literal
 
 from blazechunk._chunk import Chunk
 from blazechunk._chunk import CodeChunker as _CodeChunker
+from blazechunk._chunk import LateChunk
+from blazechunk._chunk import LateChunker as _LateChunker
 from blazechunk._chunk import RecursiveChunker as _RecursiveChunker
+from blazechunk._chunk import SDPMChunker as _SDPMChunker
+from blazechunk._chunk import SemanticChunker as _SemanticChunker
 from blazechunk._chunk import SentenceChunker as _SentenceChunker
 from blazechunk._chunk import TableChunker as _TableChunker
 from blazechunk._chunk import TokenChunker as _TokenChunker
@@ -41,11 +45,66 @@ from blazechunk._chunk import TokenChunker as _TokenChunker
 __all__ = [
     "BaseChunker",
     "CodeChunker",
+    "LateChunk",
+    "LateChunker",
     "RecursiveChunker",
+    "SDPMChunker",
+    "SemanticChunker",
     "SentenceChunker",
     "TableChunker",
     "TokenChunker",
 ]
+
+#: An embedding model for the semantic chunkers. Accepted forms:
+#:
+#: * a **callable** ``f(list[str]) -> 2D`` returning one vector per input text
+#:   (a NumPy 2D array, or a list of float lists);
+#: * an **object** exposing ``embed_batch(list[str]) -> 2D`` (the Chonkie
+#:   ``BaseEmbeddings`` convention); or
+#: * an **object** exposing ``encode(list[str]) -> 2D`` (the sentence-transformers
+#:   convention).
+#:
+#: The pure-Rust core has no model of its own — you inject one here and the Rust
+#: orchestration calls back into it for embeddings.
+EmbeddingModel = Any
+
+
+def _as_embed_batch(embedding_model: Any) -> Any:
+    """Adapt an :data:`EmbeddingModel` into a ``callable(list[str]) -> 2D``."""
+    if embedding_model is None:
+        raise ValueError("embedding_model is required for semantic chunking")
+    embed_batch = getattr(embedding_model, "embed_batch", None)
+    if callable(embed_batch):
+        return lambda texts: embed_batch(list(texts))
+    encode = getattr(embedding_model, "encode", None)
+    if callable(encode):
+        return lambda texts: encode(list(texts))
+    if callable(embedding_model):
+        return lambda texts: embedding_model(list(texts))
+    raise TypeError(
+        "embedding_model must be callable(list[str]) -> 2D, or expose "
+        "embed_batch(list[str]) -> 2D or encode(list[str]) -> 2D"
+    )
+
+
+def _as_token_embed_fns(embedding_model: Any) -> tuple[Any, Any]:
+    """Adapt a late-chunking model into ``(embed_as_tokens, embed)`` callables.
+
+    Accepts an object exposing both ``embed_as_tokens(text) -> 2D`` and
+    ``embed(text) -> 1D``, or a 2-tuple of those callables.
+    """
+    if isinstance(embedding_model, tuple) and len(embedding_model) == 2:
+        embed_tokens, embed = embedding_model
+        if callable(embed_tokens) and callable(embed):
+            return embed_tokens, embed
+    embed_tokens = getattr(embedding_model, "embed_as_tokens", None)
+    embed = getattr(embedding_model, "embed", None)
+    if callable(embed_tokens) and callable(embed):
+        return (lambda text: embed_tokens(text), lambda text: embed(text))
+    raise TypeError(
+        "LateChunker embedding_model must expose embed_as_tokens(text) -> 2D and "
+        "embed(text) -> 1D, or be a (embed_as_tokens, embed) tuple of callables"
+    )
 
 #: Where a delimiter/pattern is attached when text is split on it.
 #:
@@ -527,5 +586,250 @@ class CodeChunker(BaseChunker):
                 tokenizer=tokenizer,
                 chunk_size=chunk_size,
                 language=language,
+            )
+        )
+
+
+class SemanticChunker(BaseChunker):
+    """Chunk text at semantic-similarity troughs between sentence windows.
+
+    Sentences are embedded (via the injected ``embedding_model``) as a sliding
+    window and compared to the sentence that follows; a drop in that similarity
+    curve marks a topic shift and becomes a chunk boundary. Boundaries are found
+    with a Savitzky–Golay filter and kept when they fall below a percentile
+    ``threshold``. Sentences between boundaries are grouped, then any group over
+    ``chunk_size`` tokens is split at sentence boundaries.
+
+    Chunks partition the input: each chunk's ``text`` is exactly the slice between
+    its ``start_index`` and ``end_index``, chunks are contiguous, and together
+    they cover the whole input. Whitespace-only input returns ``[]``.
+
+    Example:
+        >>> import numpy as np
+        >>> from blazechunk import SemanticChunker
+        >>> # A toy topic embedder: "cat" vs "finance" direction.
+        >>> def embed(texts):
+        ...     out = []
+        ...     for t in texts:
+        ...         low = t.lower()
+        ...         out.append([low.count("cat"), low.count("finance"), 0.05])
+        ...     return np.array(out, dtype="float32")
+        >>> chunker = SemanticChunker(embed, min_characters_per_sentence=1,
+        ...                           filter_tolerance=0.5)
+        >>> isinstance(chunker.chunk("The cat sat. A cat purrs."), list)
+        True
+    """
+
+    def __init__(
+        self,
+        embedding_model: EmbeddingModel,
+        *,
+        tokenizer: Tokenizer = "character",
+        threshold: float = 0.8,
+        chunk_size: int = 2048,
+        similarity_window: int = 3,
+        min_sentences_per_chunk: int = 1,
+        min_characters_per_sentence: int = 24,
+        delim: Sequence[str] | None = None,
+        include_delim: IncludeDelim = "prev",
+        skip_window: int = 0,
+        filter_window: int = 5,
+        filter_polyorder: int = 3,
+        filter_tolerance: float = 0.2,
+    ) -> None:
+        """Configure a semantic chunker.
+
+        Args:
+            embedding_model: The embedding source (see :data:`EmbeddingModel`).
+            tokenizer: How chunk size is measured — a built-in counter name or a
+                ``tokenizer.json`` path. Defaults to ``"character"``.
+            threshold: Percentile in ``(0, 1)`` for keeping similarity troughs as
+                split points; also the raw cosine cutoff for the skip-merge pass.
+            chunk_size: Target maximum tokens per chunk. Must be > 0.
+            similarity_window: Number of sentences per comparison window. Must be
+                > 0.
+            min_sentences_per_chunk: Minimum sentences between split points.
+            min_characters_per_sentence: Sentence fragments shorter than this are
+                merged with a neighbour.
+            delim: Sentence delimiters. ``None`` uses ``[". ", "! ", "? ", "\\n"]``.
+            include_delim: Where the delimiter attaches — ``"prev"``/``"next"``/``"none"``.
+            skip_window: If > 0, enable the double-pass skip-merge (see
+                :class:`SDPMChunker`). ``0`` (the default) disables it.
+            filter_window: Savitzky–Golay window length (odd). Must be > 0.
+            filter_polyorder: Savitzky–Golay polynomial order. Must be
+                ``< filter_window``.
+            filter_tolerance: First-derivative zero tolerance for minima, in
+                ``(0, 1)``.
+
+        Raises:
+            ValueError: If any numeric parameter is out of range.
+            TypeError: If ``embedding_model`` is not an accepted form.
+        """
+        super().__init__(
+            _SemanticChunker(
+                _as_embed_batch(embedding_model),
+                tokenizer=tokenizer,
+                threshold=threshold,
+                chunk_size=chunk_size,
+                similarity_window=similarity_window,
+                min_sentences_per_chunk=min_sentences_per_chunk,
+                min_characters_per_sentence=min_characters_per_sentence,
+                delim=list(delim) if delim is not None else None,
+                include_delim=include_delim,
+                skip_window=skip_window,
+                filter_window=filter_window,
+                filter_polyorder=filter_polyorder,
+                filter_tolerance=filter_tolerance,
+            )
+        )
+
+
+class SDPMChunker(BaseChunker):
+    """Semantic chunking with a second, skip-window merge pass (SDPM).
+
+    Semantic Double-Pass Merging first groups sentences at similarity troughs
+    exactly like :class:`SemanticChunker`, then makes a second pass that looks
+    ahead up to ``skip_window + 1`` groups and merges the current group with the
+    most similar one within reach — bridging a short off-topic digression back to
+    the topic it interrupted. Only the ``skip_window`` default differs from
+    :class:`SemanticChunker`: here it is ``1`` (and must be ``>= 1``), so the
+    second pass is always active.
+
+    Chunks partition the input (same invariants as :class:`SemanticChunker`).
+    Whitespace-only input returns ``[]``.
+
+    Example:
+        >>> import numpy as np
+        >>> from blazechunk import SDPMChunker
+        >>> def embed(texts):
+        ...     return np.array([[t.lower().count("cat"), 0.05] for t in texts],
+        ...                     dtype="float32")
+        >>> chunker = SDPMChunker(embed, min_characters_per_sentence=1)
+        >>> isinstance(chunker.chunk("A cat. A cat. A cat."), list)
+        True
+    """
+
+    def __init__(
+        self,
+        embedding_model: EmbeddingModel,
+        *,
+        tokenizer: Tokenizer = "character",
+        threshold: float = 0.8,
+        chunk_size: int = 2048,
+        similarity_window: int = 3,
+        min_sentences_per_chunk: int = 1,
+        min_characters_per_sentence: int = 24,
+        delim: Sequence[str] | None = None,
+        include_delim: IncludeDelim = "prev",
+        skip_window: int = 1,
+        filter_window: int = 5,
+        filter_polyorder: int = 3,
+        filter_tolerance: float = 0.2,
+    ) -> None:
+        """Configure an SDPM chunker.
+
+        Args:
+            embedding_model: The embedding source (see :data:`EmbeddingModel`).
+            skip_window: Number of groups to look ahead when merging. Must be
+                ``>= 1`` (``0`` would reduce this to a plain semantic chunker and
+                is rejected). Defaults to ``1``.
+
+        All other arguments match :class:`SemanticChunker`.
+
+        Raises:
+            ValueError: If any numeric parameter is out of range, including
+                ``skip_window < 1``.
+            TypeError: If ``embedding_model`` is not an accepted form.
+        """
+        super().__init__(
+            _SDPMChunker(
+                _as_embed_batch(embedding_model),
+                tokenizer=tokenizer,
+                threshold=threshold,
+                chunk_size=chunk_size,
+                similarity_window=similarity_window,
+                min_sentences_per_chunk=min_sentences_per_chunk,
+                min_characters_per_sentence=min_characters_per_sentence,
+                delim=list(delim) if delim is not None else None,
+                include_delim=include_delim,
+                skip_window=skip_window,
+                filter_window=filter_window,
+                filter_polyorder=filter_polyorder,
+                filter_tolerance=filter_tolerance,
+            )
+        )
+
+
+class LateChunker(BaseChunker):
+    """Chunk recursively, then attach a whole-document ("late") embedding per chunk.
+
+    "Late chunking" embeds the entire document once so every token vector carries
+    full-document context, and only then splits into chunks. Boundaries come from
+    a recursive delimiter hierarchy (the same strategy as
+    :class:`RecursiveChunker`); each chunk's embedding is the mean of the token
+    embeddings that fall within its span.
+
+    ``chunk(text)`` returns :class:`~blazechunk.LateChunk` objects — like a normal
+    chunk (``text``, ``start_index``, ``end_index``, ``token_count``) but also
+    carrying an ``embedding`` (a list of floats). The byte range still satisfies
+    the slice invariant. Whitespace-only input returns ``[]``.
+
+    The ``embedding_model`` must provide token-level embeddings: either an object
+    exposing ``embed_as_tokens(text) -> 2D`` and ``embed(text) -> 1D``, or a
+    ``(embed_as_tokens, embed)`` tuple of callables.
+
+    Example:
+        >>> import numpy as np
+        >>> from blazechunk import LateChunker
+        >>> # A toy token embedder: one vector per character.
+        >>> class Toy:
+        ...     def embed_as_tokens(self, text):
+        ...         return np.array([[ord(c) % 97, i % 13] for i, c in enumerate(text)],
+        ...                         dtype="float32")
+        ...     def embed(self, text):
+        ...         toks = self.embed_as_tokens(text)
+        ...         return toks.mean(axis=0) if len(toks) else np.zeros(2, "float32")
+        >>> chunks = LateChunker(Toy(), chunk_size=8,
+        ...                      min_characters_per_chunk=1).chunk("hello world foo bar")
+        >>> all(len(c.embedding) == 2 for c in chunks)
+        True
+    """
+
+    def __init__(
+        self,
+        embedding_model: EmbeddingModel,
+        *,
+        tokenizer: Tokenizer = "character",
+        chunk_size: int = 2048,
+        min_characters_per_chunk: int = 24,
+        rules: list[dict[str, Any]] | None = None,
+    ) -> None:
+        """Configure a late chunker.
+
+        Args:
+            embedding_model: A token-embedding source (see the class docstring).
+            tokenizer: How boundary chunk size is measured — a built-in counter
+                name or a ``tokenizer.json`` path. Defaults to ``"character"``. For
+                best alignment, use the same tokenization the embedder uses.
+            chunk_size: Target maximum tokens per chunk. Must be > 0.
+            min_characters_per_chunk: Fragments shorter than this merge into a
+                neighbour. Must be > 0.
+            rules: Optional custom delimiter hierarchy (same format as
+                :class:`RecursiveChunker`). ``None`` uses the built-in hierarchy.
+
+        Raises:
+            ValueError: If ``chunk_size`` or ``min_characters_per_chunk`` is 0, or
+                ``rules`` is malformed.
+            TypeError: If ``embedding_model`` is not an accepted form.
+        """
+        embed_tokens_fn, embed_fn = _as_token_embed_fns(embedding_model)
+        super().__init__(
+            _LateChunker(
+                embed_tokens_fn,
+                embed_fn,
+                tokenizer=tokenizer,
+                chunk_size=chunk_size,
+                min_characters_per_chunk=min_characters_per_chunk,
+                rules=rules,
             )
         )

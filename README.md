@@ -50,7 +50,7 @@
 </p>
 
 **blazechunk** splits text at semantic boundaries and does it stupid fast: a SIMD-accelerated
-Rust core with a small, uniform Python API. It ships six chunkers, and every high-level chunker
+Rust core with a small, uniform Python API. It ships nine chunkers, and every high-level chunker
 offers **matching synchronous and asynchronous** methods with full type hints and docstrings.
 
 📖 **Documentation:** https://blazechunk-documentation.vercel.app/
@@ -58,8 +58,9 @@ offers **matching synchronous and asynchronous** methods with full type hints an
 ### Features
 
 - ⚡ **SIMD-accelerated Rust core** — up to ~1 TB/s on the raw chunking primitive.
-- 🧩 **Six chunkers** — a zero-copy byte `Chunker` plus `RecursiveChunker`, `SentenceChunker`,
-  `TokenChunker`, `TableChunker`, and `CodeChunker`.
+- 🧩 **Nine chunkers** — a zero-copy byte `Chunker` plus `RecursiveChunker`, `SentenceChunker`,
+  `TokenChunker`, `TableChunker`, `CodeChunker`, and the embedding-based `SemanticChunker`,
+  `SDPMChunker`, and `LateChunker`.
 - 🔁 **Sync *and* async** — every chunker has `chunk` / `chunk_async` and
   `chunk_batch` / `chunk_batch_async`; async work runs off the event loop.
 - 🔤 **Pluggable tokenizers** — count by character, word, byte, or table row out of the box,
@@ -113,7 +114,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-#### The six chunkers
+#### The nine chunkers
 
 | Chunker            | Splits on                                             |
 |--------------------|-------------------------------------------------------|
@@ -123,6 +124,9 @@ asyncio.run(main())
 | `TokenChunker`     | fixed-size token windows, with optional overlap       |
 | `TableChunker`     | Markdown/HTML table rows (header repeated per chunk)  |
 | `CodeChunker`      | structural code blocks (brace/indent aware)           |
+| `SemanticChunker`  | semantic-similarity troughs between sentence windows  |
+| `SDPMChunker`      | semantic + a skip-window double-pass merge            |
+| `LateChunker`      | recursive boundaries + mean-pooled "late" embeddings  |
 
 ```python
 from blazechunk import SentenceChunker, TableChunker, CodeChunker
@@ -130,6 +134,33 @@ from blazechunk import SentenceChunker, TableChunker, CodeChunker
 SentenceChunker(chunk_size=2048, chunk_overlap=128).chunk(prose)
 TableChunker(chunk_size=3).chunk(markdown_or_html_table)
 CodeChunker(chunk_size=2048, language="python").chunk(source_code)
+```
+
+#### Embedding-based chunkers
+
+`SemanticChunker`, `SDPMChunker`, and `LateChunker` need vectors — and the pure-Rust core
+ships **no model**. You *inject* an embedder, exactly like you inject a tokenizer; the Rust
+orchestration calls back into it. Pass any callable `embed_batch(list[str]) -> 2D`, or an
+object exposing `embed_batch` / `encode` (e.g. sentence-transformers or model2vec):
+
+```python
+from sentence_transformers import SentenceTransformer
+from blazechunk import SemanticChunker, SDPMChunker, LateChunker
+
+model = SentenceTransformer("all-MiniLM-L6-v2")
+
+# SemanticChunker / SDPMChunker: one vector per sentence window.
+semantic = SemanticChunker(model, threshold=0.8, chunk_size=2048)
+chunks = semantic.chunk(prose)          # -> list[Chunk], partitions the text
+
+# SDPM adds a skip-window second pass that re-merges related, non-adjacent groups.
+sdpm = SDPMChunker(model, skip_window=1).chunk(prose)
+
+# LateChunker embeds the whole document once, then mean-pools per chunk. It needs
+# token-level embeddings: an object with embed_as_tokens(text) and embed(text)
+# (or a (embed_as_tokens, embed) tuple). Each result is a LateChunk with `.embedding`.
+late = LateChunker(token_model, chunk_size=2048).chunk(document)
+vec = late[0].embedding                 # the chunk's late-interaction vector
 ```
 
 #### Zero-copy fast path
