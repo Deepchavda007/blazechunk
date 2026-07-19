@@ -4,7 +4,7 @@
     blazechunk<br /> <br />
     <a href="https://pypi.org/project/blazechunk/">
       <img
-        src="https://img.shields.io/badge/pypi-v0.13.0-3775A9"
+        src="https://badgen.net/badge/pypi/v0.13.0/blue"
         alt="PyPI version"
       />
     </a>
