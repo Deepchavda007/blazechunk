@@ -269,7 +269,7 @@ mod tests {
         let mut prev = 0;
         for (s, e) in &spans {
             assert_eq!(*s, prev);
-            assert!(std::str::from_utf8(&text.as_bytes()[*s..*e]).is_ok());
+            assert!(text.get(*s..*e).is_some());
             prev = *e;
         }
         assert_eq!(prev, text.len());
@@ -392,7 +392,7 @@ mod tests {
         for &(s, e) in &spans {
             assert_eq!(s, prev);
             assert!(text.is_char_boundary(s) && text.is_char_boundary(e));
-            assert!(std::str::from_utf8(&text.as_bytes()[s..e]).is_ok());
+            assert!(text.get(s..e).is_some());
             prev = e;
         }
         assert_eq!(prev, text.len());

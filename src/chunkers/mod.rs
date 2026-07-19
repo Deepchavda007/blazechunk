@@ -84,13 +84,19 @@ pub(crate) fn line_ranges(text: &str) -> Vec<(usize, usize)> {
 }
 
 pub mod code;
+pub mod late;
 pub mod recursive;
+pub mod sdpm;
+pub mod semantic;
 pub mod sentence;
 pub mod table;
 pub mod token;
 
 pub use code::{CodeChunker, Language};
+pub use late::{LateChunk, LateChunker};
 pub use recursive::{RecursiveChunker, RecursiveLevel, RecursiveRules};
+pub use sdpm::SDPMChunker;
+pub use semantic::SemanticChunker;
 pub use sentence::SentenceChunker;
 pub use table::{TableChunk, TableChunker};
 pub use token::{Overlap, TokenChunker};

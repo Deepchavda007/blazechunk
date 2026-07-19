@@ -41,16 +41,21 @@ from blazechunk._chunk import (
     split_pattern_offsets,
 )
 
+from blazechunk._chunk import LateChunk
+
 from blazechunk.chunkers import (
     BaseChunker,
     CodeChunker,
+    LateChunker,
     RecursiveChunker,
+    SDPMChunker,
+    SemanticChunker,
     SentenceChunker,
     TableChunker,
     TokenChunker,
 )
 
-__version__ = "0.11.0"
+__version__ = "0.13.0"
 
 __all__ = [
     # High-level chunkers
@@ -60,7 +65,11 @@ __all__ = [
     "TokenChunker",
     "TableChunker",
     "CodeChunker",
+    "SemanticChunker",
+    "SDPMChunker",
+    "LateChunker",
     "Chunk",
+    "LateChunk",
     # Low-level fast path
     "Chunker",
     "chunk",

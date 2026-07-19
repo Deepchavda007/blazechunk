@@ -1,10 +1,11 @@
 #[cfg(feature = "hf-tokenizer")]
 use chunk::HfTokenCounter;
 use chunk::{
-    ByteCounter, CharCounter, Chunk as RsChunk, ChunkError, CodeChunker as RsCode, Language,
-    Overlap as RsOverlap, RecursiveChunker as RsRecursive, RecursiveLevel, RecursiveRules,
-    RowCounter, SentenceChunker as RsSentence, TableChunker as RsTable, TokenChunker as RsToken,
-    TokenCounter, WordCounter,
+    ByteCounter, CharCounter, Chunk as RsChunk, ChunkError, CodeChunker as RsCode, Embedder,
+    Language, LateChunker as RsLate, Overlap as RsOverlap, RecursiveChunker as RsRecursive,
+    RecursiveLevel, RecursiveRules, RowCounter, SDPMChunker as RsSDPM,
+    SemanticChunker as RsSemantic, SentenceChunker as RsSentence, TableChunker as RsTable,
+    TokenChunker as RsToken, TokenCounter, TokenEmbedder, WordCounter,
 };
 use chunk::{
     DEFAULT_DELIMITERS, DEFAULT_TARGET_SIZE, IncludeDelim, OwnedChunker,
@@ -1163,6 +1164,504 @@ impl PyCodeChunker {
     }
 }
 
+// ============================================================================
+// Embedding injection: bridge a Python callable/object to the core Embedder /
+// TokenEmbedder traits. The Rust chunker orchestration calls back into Python for
+// embeddings, re-entering the GIL each time (cheap: we are already attached).
+// ============================================================================
+
+/// Convert a Python object (numpy 2D array, or list/sequence of float sequences) into a
+/// `Vec<Vec<f32>>`.
+fn py_to_matrix(obj: &Bound<'_, PyAny>) -> PyResult<Vec<Vec<f32>>> {
+    let mut rows = Vec::new();
+    for row in obj.try_iter()? {
+        rows.push(py_to_vector(&row?)?);
+    }
+    Ok(rows)
+}
+
+/// Convert a Python object (numpy 1D array, or sequence of floats) into a `Vec<f32>`.
+fn py_to_vector(obj: &Bound<'_, PyAny>) -> PyResult<Vec<f32>> {
+    if let Ok(v) = obj.extract::<Vec<f32>>() {
+        return Ok(v);
+    }
+    let mut v = Vec::new();
+    for x in obj.try_iter()? {
+        v.push(x?.extract::<f32>()?);
+    }
+    Ok(v)
+}
+
+/// Wraps a Python callable `embed_batch(list[str]) -> 2D floats` as a core [`Embedder`].
+///
+/// A Python error raised during embedding cannot cross the infallible trait boundary, so it
+/// is captured in `error` and re-raised by the caller after `chunk()` returns; on failure
+/// the batch is filled with empty vectors to keep result lengths consistent (downstream
+/// indexing stays in bounds; empty vectors yield zero similarity).
+struct PyEmbedder {
+    func: Py<PyAny>,
+    error: std::cell::RefCell<Option<PyErr>>,
+}
+
+impl PyEmbedder {
+    fn new(func: Py<PyAny>) -> Self {
+        Self {
+            func,
+            error: std::cell::RefCell::new(None),
+        }
+    }
+
+    fn take_error(&self) -> Option<PyErr> {
+        self.error.borrow_mut().take()
+    }
+
+    fn record(&self, err: PyErr) {
+        if self.error.borrow().is_none() {
+            *self.error.borrow_mut() = Some(err);
+        }
+    }
+}
+
+impl Embedder for PyEmbedder {
+    fn embed_batch(&self, texts: &[&str]) -> Vec<Vec<f32>> {
+        Python::attach(|py| {
+            let list = pyo3::types::PyList::new(py, texts)?;
+            let result = self.func.bind(py).call1((list,))?;
+            let matrix = py_to_matrix(&result)?;
+            PyResult::Ok(matrix)
+        })
+        .unwrap_or_else(|e| {
+            self.record(e);
+            vec![Vec::new(); texts.len()]
+        })
+    }
+}
+
+/// Wraps two Python callables — `embed_as_tokens(str) -> 2D floats` and `embed(str) -> 1D
+/// floats` — as a core [`TokenEmbedder`]. Errors are captured like [`PyEmbedder`].
+struct PyTokenEmbedder {
+    embed_tokens_fn: Py<PyAny>,
+    embed_fn: Py<PyAny>,
+    error: std::cell::RefCell<Option<PyErr>>,
+}
+
+impl PyTokenEmbedder {
+    fn new(embed_tokens_fn: Py<PyAny>, embed_fn: Py<PyAny>) -> Self {
+        Self {
+            embed_tokens_fn,
+            embed_fn,
+            error: std::cell::RefCell::new(None),
+        }
+    }
+
+    fn take_error(&self) -> Option<PyErr> {
+        self.error.borrow_mut().take()
+    }
+
+    fn record(&self, err: PyErr) {
+        if self.error.borrow().is_none() {
+            *self.error.borrow_mut() = Some(err);
+        }
+    }
+}
+
+impl TokenEmbedder for PyTokenEmbedder {
+    fn embed_as_tokens(&self, text: &str) -> Vec<Vec<f32>> {
+        Python::attach(|py| {
+            let result = self.embed_tokens_fn.bind(py).call1((text,))?;
+            PyResult::Ok(py_to_matrix(&result)?)
+        })
+        .unwrap_or_else(|e| {
+            self.record(e);
+            Vec::new()
+        })
+    }
+
+    fn embed(&self, text: &str) -> Vec<f32> {
+        Python::attach(|py| {
+            let result = self.embed_fn.bind(py).call1((text,))?;
+            PyResult::Ok(py_to_vector(&result)?)
+        })
+        .unwrap_or_else(|e| {
+            self.record(e);
+            Vec::new()
+        })
+    }
+}
+
+/// A chunk carrying its late-interaction embedding.
+#[pyclass(name = "LateChunk")]
+#[derive(Clone)]
+pub struct PyLateChunk {
+    #[pyo3(get)]
+    text: String,
+    #[pyo3(get)]
+    start_index: usize,
+    #[pyo3(get)]
+    end_index: usize,
+    #[pyo3(get)]
+    token_count: usize,
+    #[pyo3(get)]
+    embedding: Vec<f32>,
+}
+
+#[pymethods]
+impl PyLateChunk {
+    fn __len__(&self) -> usize {
+        self.text.chars().count()
+    }
+
+    fn __repr__(&self) -> String {
+        let preview: String = self.text.chars().take(40).collect();
+        let ellipsis = if self.text.chars().count() > 40 {
+            "…"
+        } else {
+            ""
+        };
+        format!(
+            "LateChunk(text={:?}{}, start_index={}, end_index={}, token_count={}, embedding_dim={})",
+            preview,
+            ellipsis,
+            self.start_index,
+            self.end_index,
+            self.token_count,
+            self.embedding.len()
+        )
+    }
+}
+
+/// Semantic chunking via similarity-trough detection.
+#[pyclass(name = "SemanticChunker")]
+pub struct PySemanticChunker {
+    embed_fn: Py<PyAny>,
+    tokenizer: String,
+    counter: BoundCounter,
+    threshold: f64,
+    chunk_size: usize,
+    similarity_window: usize,
+    min_sentences_per_chunk: usize,
+    min_characters_per_sentence: usize,
+    delim: Vec<String>,
+    include_delim: IncludeDelim,
+    skip_window: usize,
+    filter_window: usize,
+    filter_polyorder: usize,
+    filter_tolerance: f64,
+}
+
+impl PySemanticChunker {
+    fn build(&self) -> RsSemantic {
+        RsSemantic::new()
+            .threshold(self.threshold)
+            .chunk_size(self.chunk_size)
+            .similarity_window(self.similarity_window)
+            .min_sentences_per_chunk(self.min_sentences_per_chunk)
+            .min_characters_per_sentence(self.min_characters_per_sentence)
+            .delim(self.delim.clone())
+            .include_delim(self.include_delim)
+            .skip_window(self.skip_window)
+            .filter_window(self.filter_window)
+            .filter_polyorder(self.filter_polyorder)
+            .filter_tolerance(self.filter_tolerance)
+    }
+}
+
+#[pymethods]
+impl PySemanticChunker {
+    #[new]
+    #[pyo3(signature = (
+        embed_fn,
+        tokenizer=None,
+        threshold=0.8,
+        chunk_size=2048,
+        similarity_window=3,
+        min_sentences_per_chunk=1,
+        min_characters_per_sentence=24,
+        delim=None,
+        include_delim=None,
+        skip_window=0,
+        filter_window=5,
+        filter_polyorder=3,
+        filter_tolerance=0.2,
+    ))]
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        embed_fn: Py<PyAny>,
+        tokenizer: Option<String>,
+        threshold: f64,
+        chunk_size: usize,
+        similarity_window: usize,
+        min_sentences_per_chunk: usize,
+        min_characters_per_sentence: usize,
+        delim: Option<Vec<String>>,
+        include_delim: Option<String>,
+        skip_window: usize,
+        filter_window: usize,
+        filter_polyorder: usize,
+        filter_tolerance: f64,
+    ) -> PyResult<Self> {
+        let name = tokenizer.unwrap_or_else(|| "character".to_string());
+        let (tokenizer, counter) = BoundCounter::resolve(&name)?;
+        let include_delim = parse_include_delim(&include_delim.unwrap_or_else(|| "prev".into()))?;
+        let delim =
+            delim.unwrap_or_else(|| vec![". ".into(), "! ".into(), "? ".into(), "\n".into()]);
+        let this = Self {
+            embed_fn,
+            tokenizer,
+            counter,
+            threshold,
+            chunk_size,
+            similarity_window,
+            min_sentences_per_chunk,
+            min_characters_per_sentence,
+            delim,
+            include_delim,
+            skip_window,
+            filter_window,
+            filter_polyorder,
+            filter_tolerance,
+        };
+        this.build().validate().map_err(chunk_err_to_py)?;
+        Ok(this)
+    }
+
+    fn chunk(&self, text: &str) -> PyResult<Vec<PyChunk>> {
+        let embedder = PyEmbedder::new(Python::attach(|py| self.embed_fn.clone_ref(py)));
+        let chunks = self
+            .build()
+            .chunk(text, self.counter.as_dyn(), &embedder)
+            .map_err(chunk_err_to_py)?;
+        if let Some(err) = embedder.take_error() {
+            return Err(err);
+        }
+        Ok(to_py_chunks(text, chunks))
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "SemanticChunker(chunk_size={}, threshold={}, similarity_window={}, skip_window={}, tokenizer='{}')",
+            self.chunk_size,
+            self.threshold,
+            self.similarity_window,
+            self.skip_window,
+            self.tokenizer
+        )
+    }
+}
+
+/// Semantic Double-Pass Merging chunker.
+#[pyclass(name = "SDPMChunker")]
+pub struct PySDPMChunker {
+    embed_fn: Py<PyAny>,
+    tokenizer: String,
+    counter: BoundCounter,
+    threshold: f64,
+    chunk_size: usize,
+    similarity_window: usize,
+    min_sentences_per_chunk: usize,
+    min_characters_per_sentence: usize,
+    delim: Vec<String>,
+    include_delim: IncludeDelim,
+    skip_window: usize,
+    filter_window: usize,
+    filter_polyorder: usize,
+    filter_tolerance: f64,
+}
+
+impl PySDPMChunker {
+    fn build(&self) -> RsSDPM {
+        RsSDPM::new()
+            .threshold(self.threshold)
+            .chunk_size(self.chunk_size)
+            .similarity_window(self.similarity_window)
+            .min_sentences_per_chunk(self.min_sentences_per_chunk)
+            .min_characters_per_sentence(self.min_characters_per_sentence)
+            .delim(self.delim.clone())
+            .include_delim(self.include_delim)
+            .skip_window(self.skip_window)
+            .filter_window(self.filter_window)
+            .filter_polyorder(self.filter_polyorder)
+            .filter_tolerance(self.filter_tolerance)
+    }
+}
+
+#[pymethods]
+impl PySDPMChunker {
+    #[new]
+    #[pyo3(signature = (
+        embed_fn,
+        tokenizer=None,
+        threshold=0.8,
+        chunk_size=2048,
+        similarity_window=3,
+        min_sentences_per_chunk=1,
+        min_characters_per_sentence=24,
+        delim=None,
+        include_delim=None,
+        skip_window=1,
+        filter_window=5,
+        filter_polyorder=3,
+        filter_tolerance=0.2,
+    ))]
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        embed_fn: Py<PyAny>,
+        tokenizer: Option<String>,
+        threshold: f64,
+        chunk_size: usize,
+        similarity_window: usize,
+        min_sentences_per_chunk: usize,
+        min_characters_per_sentence: usize,
+        delim: Option<Vec<String>>,
+        include_delim: Option<String>,
+        skip_window: usize,
+        filter_window: usize,
+        filter_polyorder: usize,
+        filter_tolerance: f64,
+    ) -> PyResult<Self> {
+        let name = tokenizer.unwrap_or_else(|| "character".to_string());
+        let (tokenizer, counter) = BoundCounter::resolve(&name)?;
+        let include_delim = parse_include_delim(&include_delim.unwrap_or_else(|| "prev".into()))?;
+        let delim =
+            delim.unwrap_or_else(|| vec![". ".into(), "! ".into(), "? ".into(), "\n".into()]);
+        let this = Self {
+            embed_fn,
+            tokenizer,
+            counter,
+            threshold,
+            chunk_size,
+            similarity_window,
+            min_sentences_per_chunk,
+            min_characters_per_sentence,
+            delim,
+            include_delim,
+            skip_window,
+            filter_window,
+            filter_polyorder,
+            filter_tolerance,
+        };
+        this.build().validate().map_err(chunk_err_to_py)?;
+        Ok(this)
+    }
+
+    fn chunk(&self, text: &str) -> PyResult<Vec<PyChunk>> {
+        let embedder = PyEmbedder::new(Python::attach(|py| self.embed_fn.clone_ref(py)));
+        let chunks = self
+            .build()
+            .chunk(text, self.counter.as_dyn(), &embedder)
+            .map_err(chunk_err_to_py)?;
+        if let Some(err) = embedder.take_error() {
+            return Err(err);
+        }
+        Ok(to_py_chunks(text, chunks))
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "SDPMChunker(chunk_size={}, threshold={}, similarity_window={}, skip_window={}, tokenizer='{}')",
+            self.chunk_size,
+            self.threshold,
+            self.similarity_window,
+            self.skip_window,
+            self.tokenizer
+        )
+    }
+}
+
+/// Late chunking: recursive boundaries + whole-document contextual embeddings.
+#[pyclass(name = "LateChunker")]
+pub struct PyLateChunker {
+    embed_tokens_fn: Py<PyAny>,
+    embed_fn: Py<PyAny>,
+    tokenizer: String,
+    counter: BoundCounter,
+    chunk_size: usize,
+    min_characters_per_chunk: usize,
+    rules: RecursiveRules,
+}
+
+impl PyLateChunker {
+    fn build(&self) -> RsLate {
+        RsLate::new()
+            .chunk_size(self.chunk_size)
+            .min_characters_per_chunk(self.min_characters_per_chunk)
+            .rules(self.rules.clone())
+    }
+}
+
+#[pymethods]
+impl PyLateChunker {
+    #[new]
+    #[pyo3(signature = (
+        embed_tokens_fn,
+        embed_fn,
+        tokenizer=None,
+        chunk_size=2048,
+        min_characters_per_chunk=24,
+        rules=None,
+    ))]
+    fn new(
+        embed_tokens_fn: Py<PyAny>,
+        embed_fn: Py<PyAny>,
+        tokenizer: Option<String>,
+        chunk_size: usize,
+        min_characters_per_chunk: usize,
+        rules: Option<Vec<Bound<'_, PyAny>>>,
+    ) -> PyResult<Self> {
+        let name = tokenizer.unwrap_or_else(|| "character".to_string());
+        let (tokenizer, counter) = BoundCounter::resolve(&name)?;
+        let rules = parse_recursive_rules(rules)?;
+        let this = Self {
+            embed_tokens_fn,
+            embed_fn,
+            tokenizer,
+            counter,
+            chunk_size,
+            min_characters_per_chunk,
+            rules,
+        };
+        this.build().validate().map_err(chunk_err_to_py)?;
+        Ok(this)
+    }
+
+    fn chunk(&self, text: &str) -> PyResult<Vec<PyLateChunk>> {
+        let (tokens_fn, embed_fn) = Python::attach(|py| {
+            (
+                self.embed_tokens_fn.clone_ref(py),
+                self.embed_fn.clone_ref(py),
+            )
+        });
+        let embedder = PyTokenEmbedder::new(tokens_fn, embed_fn);
+        let chunks = self
+            .build()
+            .chunk(text, self.counter.as_dyn(), &embedder)
+            .map_err(chunk_err_to_py)?;
+        if let Some(err) = embedder.take_error() {
+            return Err(err);
+        }
+        Ok(chunks
+            .into_iter()
+            .map(|c| PyLateChunk {
+                text: text[c.start..c.end].to_string(),
+                start_index: c.start,
+                end_index: c.end,
+                token_count: c.token_count,
+                embedding: c.embedding,
+            })
+            .collect())
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "LateChunker(chunk_size={}, min_characters_per_chunk={}, tokenizer='{}', rules={} levels)",
+            self.chunk_size,
+            self.min_characters_per_chunk,
+            self.tokenizer,
+            self.rules.levels.len()
+        )
+    }
+}
+
 #[pymodule]
 fn _chunk(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Chunker>()?;
@@ -1172,6 +1671,10 @@ fn _chunk(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyTokenChunker>()?;
     m.add_class::<PyTableChunker>()?;
     m.add_class::<PyCodeChunker>()?;
+    m.add_class::<PySemanticChunker>()?;
+    m.add_class::<PySDPMChunker>()?;
+    m.add_class::<PyLateChunker>()?;
+    m.add_class::<PyLateChunk>()?;
     m.add_class::<MergeResult>()?;
     m.add_class::<PatternSplitter>()?;
     m.add_function(wrap_pyfunction!(chunk_offsets, m)?)?;

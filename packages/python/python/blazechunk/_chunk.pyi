@@ -6,10 +6,15 @@ itself (see ``blazechunk.chunkers``); these stubs exist so the compiled module
 type-checks cleanly for the wrappers and for advanced/direct use.
 """
 
+from collections.abc import Callable
 from typing import Any
 
 DEFAULT_TARGET_SIZE: int
 DEFAULT_DELIMITERS: bytes
+
+#: A callable returning one embedding vector per input text (numpy 2D array or
+#: list of float sequences).
+EmbedBatchFn = Callable[[list[str]], Any]
 
 class Chunk:
     """A chunk of text with byte-offset indices into the original input."""
@@ -18,6 +23,17 @@ class Chunk:
     start_index: int
     end_index: int
     token_count: int
+    def __len__(self) -> int: ...
+    def __repr__(self) -> str: ...
+
+class LateChunk:
+    """A chunk carrying its mean-pooled late-interaction embedding."""
+
+    text: str
+    start_index: int
+    end_index: int
+    token_count: int
+    embedding: list[float]
     def __len__(self) -> int: ...
     def __repr__(self) -> str: ...
 
@@ -92,6 +108,59 @@ class CodeChunker:
         language: str | None = ...,
     ) -> None: ...
     def chunk(self, text: str) -> list[Chunk]: ...
+    def __repr__(self) -> str: ...
+
+class SemanticChunker:
+    def __init__(
+        self,
+        embed_fn: EmbedBatchFn,
+        tokenizer: str | None = ...,
+        threshold: float = ...,
+        chunk_size: int = ...,
+        similarity_window: int = ...,
+        min_sentences_per_chunk: int = ...,
+        min_characters_per_sentence: int = ...,
+        delim: list[str] | None = ...,
+        include_delim: str | None = ...,
+        skip_window: int = ...,
+        filter_window: int = ...,
+        filter_polyorder: int = ...,
+        filter_tolerance: float = ...,
+    ) -> None: ...
+    def chunk(self, text: str) -> list[Chunk]: ...
+    def __repr__(self) -> str: ...
+
+class SDPMChunker:
+    def __init__(
+        self,
+        embed_fn: EmbedBatchFn,
+        tokenizer: str | None = ...,
+        threshold: float = ...,
+        chunk_size: int = ...,
+        similarity_window: int = ...,
+        min_sentences_per_chunk: int = ...,
+        min_characters_per_sentence: int = ...,
+        delim: list[str] | None = ...,
+        include_delim: str | None = ...,
+        skip_window: int = ...,
+        filter_window: int = ...,
+        filter_polyorder: int = ...,
+        filter_tolerance: float = ...,
+    ) -> None: ...
+    def chunk(self, text: str) -> list[Chunk]: ...
+    def __repr__(self) -> str: ...
+
+class LateChunker:
+    def __init__(
+        self,
+        embed_tokens_fn: Callable[[str], Any],
+        embed_fn: Callable[[str], Any],
+        tokenizer: str | None = ...,
+        chunk_size: int = ...,
+        min_characters_per_chunk: int = ...,
+        rules: list[dict[str, Any]] | None = ...,
+    ) -> None: ...
+    def chunk(self, text: str) -> list[LateChunk]: ...
     def __repr__(self) -> str: ...
 
 class MergeResult:

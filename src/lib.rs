@@ -63,6 +63,7 @@
 mod chunk;
 mod chunkers;
 mod delim;
+mod embeddings;
 mod merge;
 mod savgol;
 mod split;
@@ -93,10 +94,16 @@ pub use crate::savgol::{
 pub use crate::token_counter::HfTokenCounter;
 pub use crate::token_counter::{ByteCounter, CharCounter, RowCounter, TokenCounter, WordCounter};
 
+// Re-export embedding injection (for the semantic chunkers)
+pub use crate::embeddings::{
+    CharTokenEmbedder, Embedder, HashEmbedder, TokenEmbedder, TopicEmbedder, cosine_similarity,
+};
+
 // Re-export chunkers
 pub use crate::chunkers::{
-    Chunk, ChunkError, CodeChunker, Language, Overlap, RecursiveChunker, RecursiveLevel,
-    RecursiveRules, SentenceChunker, TableChunk, TableChunker, TokenChunker,
+    Chunk, ChunkError, CodeChunker, Language, LateChunk, LateChunker, Overlap, RecursiveChunker,
+    RecursiveLevel, RecursiveRules, SDPMChunker, SemanticChunker, SentenceChunker, TableChunk,
+    TableChunker, TokenChunker,
 };
 
 // Additional tests that span modules
