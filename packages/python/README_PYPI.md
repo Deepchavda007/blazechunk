@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/blazechunk"><img src="https://img.shields.io/pypi/v/blazechunk" alt="PyPI"></a>
+  <a href="https://pypi.org/project/blazechunk"><img src="https://img.shields.io/badge/pypi-v0.13.0-3775A9" alt="PyPI version"></a>
   <a href="https://pypi.org/project/blazechunk"><img src="https://img.shields.io/pypi/pyversions/blazechunk" alt="Python versions"></a>
   <a href="https://blazechunk-documentation.vercel.app/"><img src="https://img.shields.io/badge/docs-blazechunk-3498db" alt="Documentation"></a>
   <a href="https://github.com/Deepchavda007/blazechunk"><img src="https://img.shields.io/badge/github-blazechunk-3498db" alt="GitHub"></a>
