@@ -2,7 +2,7 @@
   <div align="center">
   <h1>
     blazechunk<br /> <br />
-    <a href="https://pypi.python.org/pypi/blazechunk">
+    <a href="https://pypi.org/project/blazechunk/">
       <img
         src="https://img.shields.io/pypi/v/blazechunk"
         alt="Python Package"
@@ -20,7 +20,7 @@
         alt="CI"
       />
     </a>
-    <a href="https://pypi.python.org/pypi/blazechunk">
+    <a href="https://pypi.org/project/blazechunk/">
       <img
         src="https://img.shields.io/pypi/pyversions/blazechunk"
         alt="Python Versions"
