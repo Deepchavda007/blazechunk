@@ -36,7 +36,7 @@ jobs:
       - name: Create virtualenv and install dev deps
         run: |
           uv venv
-          uv pip install pytest numpy maturin
+          uv pip install pytest numpy maturin firecrawl-anydoc
 
       - name: Build the extension
         run: |

@@ -15,11 +15,22 @@ Two layers are available:
   offset/merge/split functions (:func:`chunk_offsets`, :func:`split_offsets`,
   :func:`merge_splits`, …) for building your own pipeline.
 
+Everything above chunks *text*. To chunk a **file** — PDF, Word, PowerPoint,
+Excel, OpenDocument, RTF, EPUB, CSV — use
+:class:`blazechunk.loaders.DocumentChunker`, which converts the document, keeps
+its structure, and hands each piece to the chunker that suits it. Install with
+``pip install "blazechunk[anydoc]"``.
+
 Example:
     >>> from blazechunk import TokenChunker
     >>> chunker = TokenChunker(chunk_size=512, chunk_overlap=64)
     >>> chunks = chunker.chunk("... a long document ...")
     >>> chunks[0].text, chunks[0].start_index, chunks[0].token_count  # doctest: +SKIP
+
+    >>> from blazechunk.loaders import DocumentChunker
+    >>> result = DocumentChunker().chunk("report.pdf")  # doctest: +SKIP
+    >>> result.chunks[0].heading_path                   # doctest: +SKIP
+    ('Methods', 'Sample Preparation')
 """
 
 from __future__ import annotations
@@ -55,7 +66,7 @@ from blazechunk.chunkers import (
     TokenChunker,
 )
 
-__version__ = "0.13.0"
+__version__ = "0.15.0"
 
 __all__ = [
     # High-level chunkers

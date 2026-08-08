@@ -4,14 +4,14 @@ build-backend = "maturin"
 
 [project]
 name = "blazechunk"
-version = "0.13.0"
+version = "0.15.0"
 description = "The fastest semantic text chunking library"
 readme = "README_PYPI.md"
 requires-python = ">=3.10"
 license = { text = "MIT OR Apache-2.0" }
 dependencies = []
 authors = [{ name = "Deep Chavda", email = "deep.chavda@simformsolutions.com" }]
-keywords = ["chunking", "text", "simd", "nlp", "tokenization", "rag", "blazechunk"]
+keywords = ["chunking", "text", "simd", "nlp", "tokenization", "rag", "blazechunk", "pdf", "docx"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -33,6 +33,9 @@ numpy = ["numpy>=1.20"]
 hf-tokenizer = []
 langchain = ["langchain-text-splitters>=0.3"]
 agno = ["agno>=1.0"]
+# Pinned to a compatible range rather than left open: anydoc is pre-1.0, so a
+# minor bump may change behaviour the loader depends on.
+anydoc = ["firecrawl-anydoc>=0.1.7,<0.2"]
 
 [project.urls]
 Homepage = "https://blazechunk-documentation.vercel.app/"

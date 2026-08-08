@@ -4,7 +4,7 @@
     blazechunk<br /> <br />
     <a href="https://pypi.org/project/blazechunk/">
       <img
-        src="https://badgen.net/badge/pypi/v0.13.0/blue"
+        src="https://badgen.net/badge/pypi/v0.15.0/blue"
         alt="PyPI version"
       />
     </a>
@@ -45,19 +45,25 @@
       />
     </a>
   </h1>
-  <em>the fastest semantic text chunking library — up to 1 TB/s throughput</em>
+  <em>the fastest semantic text chunking library</em>
   </div>
 </p>
 
 **blazechunk** splits text at semantic boundaries and does it stupid fast: a SIMD-accelerated
-Rust core with a small, uniform Python API. It ships nine chunkers, and every high-level chunker
-offers **matching synchronous and asynchronous** methods with full type hints and docstrings.
+Rust core with a small, uniform Python API. It ships nine chunkers, reads documents from PDF to
+Excel, and every high-level chunker offers **matching synchronous and asynchronous** methods with
+full type hints and docstrings.
 
 📖 **Documentation:** https://blazechunk-documentation.vercel.app/
 
 ### Features
 
-- ⚡ **SIMD-accelerated Rust core** — up to ~1 TB/s on the raw chunking primitive.
+- ⚡ **SIMD-accelerated Rust core** — the raw size-based chunking primitive reaches ~1 TB/s on
+  a 32 KB chunk size (see [Benchmarks](#benchmarks) for what that number does and does not
+  cover; the high-level chunkers do more work and run ~1 GiB/s).
+- 📄 **Document input** — `DocumentChunker` reads PDF, Word, PowerPoint, Excel, OpenDocument,
+  RTF, EPUB and CSV, and every chunk knows which heading it came from
+  (`pip install "blazechunk[anydoc]"`).
 - 🧩 **Nine chunkers** — a zero-copy byte `Chunker` plus `RecursiveChunker`, `SentenceChunker`,
   `TokenChunker`, `TableChunker`, `CodeChunker`, and the embedding-based `SemanticChunker`,
   `SDPMChunker`, and `LateChunker`.
@@ -175,6 +181,58 @@ for view in chunk(b"Hello. World. Test.", size=10, delimiters=b"."):
     print(bytes(view))
 ```
 
+### Documents
+
+Every RAG pipeline starts with a file, not a string. `DocumentChunker` takes the file — PDF,
+Word, PowerPoint, Excel, OpenDocument, RTF, EPUB, CSV — and returns chunks that carry the
+structure they came from.
+
+```bash
+pip install "blazechunk[anydoc]"
+```
+
+```python
+from blazechunk.loaders import DocumentChunker
+
+result = DocumentChunker().chunk("report.pdf")
+
+for c in result.chunks:
+    print(c.heading_path, c.kind, c.text[:60])
+    # ('Methods', 'Sample Preparation')  prose  'We sampled two hundred sites across …'
+```
+
+The document is segmented **before** it is chunked, so each piece is routed to a chunker that
+suits it — table rows to `TableChunker` (never split mid-row), fenced code to `CodeChunker`
+(fences intact), prose to whichever chunker you picked:
+
+```python
+from blazechunk import RecursiveChunker, TableChunker
+from blazechunk.loaders import DocumentChunker
+
+loader = DocumentChunker(
+    chunker=RecursiveChunker(chunk_size=2048),
+    table_chunker=TableChunker(chunk_size=3),
+    respect_headings=True,      # never merge across a heading boundary
+)
+
+result  = loader.chunk("handbook.docx")
+result  = await loader.chunk_async("report.pdf")
+results = loader.chunk_batch(paths, on_error="skip")   # skip unreadable files
+```
+
+`heading_path` is the highest-value field here: it makes a fragment from the middle of a long
+document self-locating, and a reranker can use it directly.
+
+**Offsets.** `md_start` / `md_end` are byte offsets into `result.markdown` — the converted
+Markdown, returned alongside the chunks — and **not** into the original file. anydoc exposes no
+mapping back to source bytes, so page-level attribution for a PDF is not something this can
+honestly provide, and no approximation is shipped in its place.
+
+**Scanned PDFs** have no text layer and need OCR, which anydoc does not do. They raise a named
+`ScannedDocumentError` rather than a puzzling "unsupported format". Conversion is handled by
+[anydoc](https://github.com/firecrawl/anydoc), a pure-Rust converter from Firecrawl with no ML
+and no network calls.
+
 ### Integrations
 
 blazechunk plugs into popular RAG frameworks — install the matching extra.
@@ -212,8 +270,10 @@ and Agno `achunk` — so they run off the event loop in async ingestion pipeline
 
 ### Benchmarks
 
-Throughput of the raw SIMD size-based chunking primitive, measured on enwik8/enwik9
-(Wikipedia extracts) on an Apple Silicon MacBook:
+The headline number is the **raw SIMD size-based chunking primitive** — finding split offsets in
+a byte buffer — measured on enwik8/enwik9 (Wikipedia extracts) on an Apple Silicon MacBook. It is
+not end-to-end throughput, and it scales with chunk size because larger chunks mean fewer
+boundaries to find:
 
 | Input           | Chunk size | Throughput |
 |-----------------|------------|------------|
