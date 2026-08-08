@@ -42,3 +42,6 @@ dist/
 
 # macOS
 .DS_Store
+
+# Local working notes, not for the repo
+temp/
