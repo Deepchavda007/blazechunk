@@ -10,7 +10,7 @@ readme = "README_PYPI.md"
 requires-python = ">=3.10"
 license = { text = "MIT OR Apache-2.0" }
 dependencies = []
-authors = [{ name = "Deep Chavda", email = "deep.chavda@simformsolutions.com" }]
+authors = [{ name = "Deep Chavda", email = "deepchavda.dl@gmail.com" }]
 keywords = ["chunking", "text", "simd", "nlp", "tokenization", "rag", "blazechunk", "pdf", "docx"]
 classifiers = [
     "Development Status :: 4 - Beta",
